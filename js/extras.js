@@ -9,10 +9,13 @@ const RIGS = {
     tail: { poly: [[249, 316], [338, 316], [338, 404], [249, 404]], px: 251, py: 362 },
     paw: { poly: [[0, 94], [79, 94], [79, 174], [0, 174]], px: 54, py: 174 },
   },
+  // Пончик — медвежонок (assets/ponchik.png из raw_arch/ponchik_bear.jpg): машет поднятой лапой
+  ponchik: { paw: { poly: [[0, 90], [76, 90], [76, 166], [0, 166]], px: 52, py: 166 } },
 };
 function npcParts(n) {
   const tail = Math.sin(G.t * 5.5 + n.ph) * 0.1 * (n.mood > 0 ? 1.8 : 1);
   const paw = n.wave > 0 ? Math.sin((1.4 - n.wave) * 11) * 0.24 * Math.min(1, n.wave * 3) : 0;
+  if (n.kind === 'ponchik') return [Object.assign({ a: paw }, RIGS.ponchik.paw)];
   return [Object.assign({ a: tail }, RIGS.bublik.tail), Object.assign({ a: paw }, RIGS.bublik.paw)];
 }
 function polyPath(c, poly, grow = 0) {

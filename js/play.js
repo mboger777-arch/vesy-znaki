@@ -15,7 +15,7 @@ const signOf = (a, b) => a > b ? '>' : a < b ? '<' : '=';
 class PlayScene {
   constructor(n) {
     this.isPlay = true; this.def = typeof n === 'object' ? n : LEVELS[n]; this.n = typeof n === 'object' ? (n.idx !== undefined ? n.idx : -1) : n; this.rng = mathRngFor(this.def.rngId !== undefined ? this.def.rngId : this.n + 1);
-    G.tasks = []; G.bubbles = []; G.particles = []; G.freeze = false; G.shake = 0; G.zoom = G.baseZoom; G.panelRect = null;
+    G.tasks = []; G.bubbles = []; Dialog.reset(); G.particles = []; G.freeze = false; G.shake = 0; G.zoom = G.baseZoom; G.panelRect = null;
     this.fflies = []; this.ffGot = 0; this.ffStreak = 0; this.ffLastT = -9; this.bouncers = []; this.puddles = []; this.gusts = []; this.gold = null; this.secretFound = false;
     this.nQ = 0; this.firstTry = 0; this.fgA = 1; this.ffA = 1;
     this.visT = 0; G.visLog = G.visLog || [];
@@ -97,7 +97,7 @@ class PlayScene {
           for (const o of q.blocks) o.hl = 0.8;
         })());
       } else {
-        say(q.speaker, q.hints[(q.tries - 1) % q.hints.length], 4.5);
+        say(q.speaker, q.hints[(q.tries - 1) % q.hints.length], 4.5, { drop: true });
       }
     }
   }
@@ -144,10 +144,10 @@ class PlayScene {
     if (this.ffRect && this.ffA > 0.05) add('табличка светлячков', this.ffRect, true);
     if (this.fgA > 0.05 && !this.def.noFg) add('передний план (трава)', { x: 0, y: G.H - 82, w: G.W, h: 82 }, true, true);
     for (const b of G.bubbles) if (b.rect && b.t < b.dur) add('пузырь «' + b.text.slice(0, 18) + '»', b.rect, true, true);
-    add('табличка HUD', { x: 24, y: 18, w: this.hudW || 210, h: 76 }, true);
+    add('табличка HUD', { x: 24 + G.sl, y: 18, w: this.hudW || 210, h: 76 }, true);
     if (this.board) { const ctx2 = canvas.getContext('2d'); ctx2.save(); ctx2.font = font(56, 900); const bw = Math.max(300, ctx2.measureText(this.board.text).width + 80); ctx2.restore(); add('доска с вопросом', { x: G.W / 2 - bw / 2, y: 16, w: bw, h: 92 }, true); }
-    add('кнопки звук/домой', { x: G.W - 164, y: 18, w: 146, h: 66 }, true);
-    if (G.touchUI) for (const b of touchButtons()) if (b.id === 'jump' || this.arrowsA > 0.05) add('сенсорная кнопка ' + b.id, { x: b.x - b.r, y: b.y - b.r, w: b.r * 2, h: b.r * 2 }, true);
+    add('кнопки звук/домой', { x: G.W - 164 - G.sr, y: 18, w: 146, h: 66 }, true);
+    if (G.touchUI) for (const b of touchButtons()) if ((b.id === 'jump' && !this.def.cutscene && !G.freeze) || this.arrowsA > 0.05) add('сенсорная кнопка ' + b.id, { x: b.x - b.r, y: b.y - b.r, w: b.r * 2, h: b.r * 2 }, true);
     if (G.panelRect) add('панель показа', G.panelRect, true);
     for (const q of G.particles) {
       if (!['leaf', 'firefly', 'puff', 'dust', 'smoke', 'confetti', 'num', 'drop', 'swirl', 'coin', 'butterfly', 'straw', 'crumb', 'flour'].includes(q.type) || (q.layer || 'world') !== 'world') continue;
@@ -293,6 +293,7 @@ class PlayScene {
     updateParticles(dt);
     for (const b of G.bubbles) b.t += dt;
     G.bubbles = G.bubbles.filter(b => b.t < b.dur);
+    Dialog.update();
     if (this.board) { this.board.t += dt; if (this.board.hide) { this.board.out = (this.board.out || 0) + dt * 3; if (this.board.out >= 1) this.board = null; } }
     G.shake = Math.max(0, G.shake - dt);
     this.flash = Math.max(0, this.flash - dt * 2.5);
@@ -351,10 +352,11 @@ class PlayScene {
     if (this.sh && this.sh.vis) { const bx = this.sh.box(); G.avoid.push(Object.assign(scr(bx.x - 20, bx.y - 30, bx.w + 40, bx.h + 40), { face: this.sh })); }
     if (this.def.avoidRects) for (const r of this.def.avoidRects(this)) G.avoid.push(Object.assign(scr(r.x, r.y, r.w, r.h), r.counted ? { counted: true } : {}));
     // HUD: табличка слева и доска с вопросом сверху
-    G.avoid.push({ x: 16, y: 0, w: (this.hudW || 210) + 16, h: 100 });
-    if (this.board) { c.font = font(56, 900); const bw = Math.max(300, c.measureText(this.board.text).width + 80); G.avoid.push({ x: G.W / 2 - bw / 2 - 10, y: 0, w: bw + 20, h: 116 }); }
-    G.avoid.push({ x: G.W - 180, y: 0, w: 180, h: 96 });
-    if (this.ffRect && this.ffA > 0.02) G.avoid.push({ x: this.ffRect.x - 8, y: this.ffRect.y - 6, w: this.ffRect.w + 16, h: this.ffRect.h + 12 });   // табличка светлячков
+    G.avoid.push({ x: 16 + G.sl, y: 0, w: (this.hudW || 210) + 16, h: 100, hud: true });
+    if (this.board) { c.font = font(56, 900); const bw = Math.max(300, c.measureText(this.board.text).width + 80); G.avoid.push({ x: G.W / 2 - bw / 2 - 10, y: 0, w: bw + 20, h: 116, hud: true }); }
+    G.avoid.push({ x: G.W - 180 - G.sr, y: 0, w: 180, h: 96, hud: true });
+    if (this.def.cutscene && this.def.drawHud) G.avoid.push({ x: G.W - 84 - G.sr - 80 - 24 - 250 - 8, y: 0, w: 266, h: 96, hud: true });   // «Пропустить»
+    if (this.ffRect && this.ffA > 0.02) G.avoid.push({ x: this.ffRect.x - 8, y: this.ffRect.y - 6, w: this.ffRect.w + 16, h: this.ffRect.h + 12, hud: true });   // табличка светлячков
     // то, что ребёнок считает, пузыри обходят в первую очередь
     for (const r of this.countedScreen()) G.avoid.push(Object.assign({}, r, { counted: true }));
     if (this.basket && this.basket.count > 0) { const bk = this.basket; G.avoid.push({ x: (bk.x - 80 - cam.x) * G.zoom, y: (bk.y - 168 - cam.y) * G.zoom, w: 160 * G.zoom, h: 170 * G.zoom }); }
@@ -398,10 +400,10 @@ class PlayScene {
         g.font = font(40, 900); txt(g, this.hud.text, 5 * 36 + 30 + tw / 2, 40, { size: 40, fill: '#fff8e6', stroke: '#5b3313', sw: 8 });
         this._hudWH = [W, H];
       }
-      c.drawImage(this._hudCv, 24, 18 - 24, this._hudWH[0], this._hudWH[1]);
-      this.hudIcons = []; for (let i = 0; i < 5; i++) this.hudIcons.push({ x: 24 + 30 + i * 36 - 18, y: 18 + 62 - 44, w: 36, h: 46, lit: i < n });
+      c.drawImage(this._hudCv, 24 + G.sl, 18 - 24, this._hudWH[0], this._hudWH[1]);
+      this.hudIcons = []; for (let i = 0; i < 5; i++) this.hudIcons.push({ x: 24 + G.sl + 30 + i * 36 - 18, y: 18 + 62 - 44, w: 36, h: 46, lit: i < n });
     } else if (this.hud.text) {
-      c.save(); c.translate(24, 18);
+      c.save(); c.translate(24 + G.sl, 18);
       c.strokeStyle = '#6b4a2a'; c.lineWidth = 4; c.beginPath(); c.moveTo(40, -20); c.lineTo(40, 6); c.moveTo(this.hudW - 40, -20); c.lineTo(this.hudW - 40, 6); c.stroke();
       // табличка гирек: число всегда берётся из гирек, которые сейчас у героев (не отстаёт на кадр)
       if (this.hud.icon === 'weights') this.hud.text = (this.weightsHave || 0) + ' из 5';
@@ -413,13 +415,13 @@ class PlayScene {
       if (strip) {
         // пять окошек маяка: горящих ровно столько, сколько решено примеров
         const nLit = this.windows ? this.windows.filter(w => w.lit).length : 0;
-        for (let i = 0; i < 5; i++) { const ix = 18 + i * 34, iy = 13; drawMiniWindow(c, ix, iy, i < nLit); this.hudIcons.push({ x: 24 + ix, y: 18 + iy, w: 26, h: 50, lit: i < nLit }); }
+        for (let i = 0; i < 5; i++) { const ix = 18 + i * 34, iy = 13; drawMiniWindow(c, ix, iy, i < nLit); this.hudIcons.push({ x: 24 + G.sl + ix, y: 18 + iy, w: 26, h: 50, lit: i < nLit }); }
         txt(c, this.hud.text, 5 * 34 + 26 + tw / 2, 40, { size: 40, fill: '#fff8e6', stroke: '#5b3313', sw: 8 });
       }
       if (wts) {
         // пять золотых гирек: золотых ровно столько, сколько уже вернули городу
         const n = this.weightsHave || 0;
-        for (let i = 0; i < 5; i++) { const ix = 30 + i * 36, iy = 62; drawWeightIcon(c, ix, iy, i < n, 30); this.hudIcons.push({ x: 24 + ix - 18, y: 18 + iy - 44, w: 36, h: 46, lit: i < n }); }
+        for (let i = 0; i < 5; i++) { const ix = 30 + i * 36, iy = 62; drawWeightIcon(c, ix, iy, i < n, 30); this.hudIcons.push({ x: 24 + G.sl + ix - 18, y: 18 + iy - 44, w: 36, h: 46, lit: i < n }); }
         txt(c, this.hud.text, 5 * 36 + 30 + tw / 2, 40, { size: 40, fill: '#fff8e6', stroke: '#5b3313', sw: 8 });
       }
       if (ic === 'lamp') { glow(c, 44, 34, 34, 'rgba(255,214,90,0.8)', 0.9); drawSprite(c, IMG.t_lamp_on, 44, 68, 60); }
@@ -430,11 +432,11 @@ class PlayScene {
     }
     // светлячки: отдельная маленькая табличка под главной (только вне вопросов)
     const ffShow = this.ffTotal > 0 && !(this.q && !this.q.solved) && !this.countedItems() && !this.card;
-    this.ffA = lerp(this.ffA, ffShow ? 1 : 0, 0.15); if (!ffShow && this.ffA < 0.03) this.ffA = 0;
+    this.ffA = ffShow ? lerp(this.ffA, 1, 0.15) : 0;
     this.ffRect = null;
     if (this.ffA > 0.02) {
       const t = String(this.ffGot); c.font = font(30, 900); const tw = c.measureText(t).width;
-      const w = 70 + tw + (this.secretFound ? 46 : 0) + 16, x = 24, y = 112;
+      const w = 70 + tw + (this.secretFound ? 46 : 0) + 16, x = 24 + G.sl, y = 112;
       c.save(); c.globalAlpha = this.ffA;
       woodPanel(c, x, y, w, 52, 16, 12);
       drawFireflyBug(c, x + 32, y + 26, 1.25, G.t, 0, 0.8);
@@ -458,7 +460,7 @@ class PlayScene {
       c.restore();
     }
     // кнопки: звук и домой
-    const bx = G.W - 84, by = 18;
+    const bx = G.W - 84 - G.sr, by = 18;
     roundIconButton(c, bx, by, 66, G.muted ? 'mute' : 'sound');
     addButton(bx, by, 66, 66, () => Sound.toggle(), 'sound');
     roundIconButton(c, bx - 80, by, 66, 'home');
@@ -466,12 +468,12 @@ class PlayScene {
     if (this.def.drawHud) this.def.drawHud(this, c);
     // сенсорные кнопки
     // во время вопроса и сценок стрелки прячутся (не закрывают героев): ответ — касанием блока
-    const asking = !!(this.q && !this.q.solved) || !!this.countedItems() || !!this.def.cutscene;
+    const asking = !!(this.q && !this.q.solved) || !!this.countedItems() || !!this.def.cutscene || !!G.freeze;   // сценка (Искра стоит) — кнопки не закрывают героев и весы
     this.arrowsA = lerp(this.arrowsA === undefined ? 1 : this.arrowsA, asking ? 0 : 1, 0.2); if (asking && this.arrowsA < 0.03) this.arrowsA = 0;
     if (G.touchUI && !this.card) {
       for (const b of touchButtons()) {
         const on = Input.touch[b.id];
-        const ba = b.id === 'jump' ? 1 : this.arrowsA; if (ba <= 0.01 && !on) continue;
+        const ba = b.id === 'jump' && !this.def.cutscene && !G.freeze ? 1 : this.arrowsA; // в сценках прячем и прыжок if (ba <= 0.01 && !on) continue;
         c.save(); c.globalAlpha = (on ? 0.75 : 0.42) * Math.max(ba, on ? 1 : 0);
         c.fillStyle = 'rgba(40,25,10,0.35)'; c.beginPath(); c.arc(b.x + 3, b.y + 7, b.r, 0, 7); c.fill();
         const g = c.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.4, b.r * 0.1, b.x, b.y, b.r);

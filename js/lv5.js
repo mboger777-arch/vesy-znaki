@@ -59,10 +59,12 @@ const LV5 = {
     S.weightsBase = 4; S.weightsHave = 4;
     S.hud = { icon: 'weights', text: (S.weightsHave || 0) + ' из 5' };
     run((function* () {
-      G.freeze = true; yield 0.5;
+      G.freeze = true;
+      // Искра появляется у самого края кадра: отходит вправо от Архимеда, чтобы её реплика была с пузырём у рта
+      S.p.autoX = tc(8); S.p.autoFace = -1; const t0 = G.t; yield () => S.p.autoX == null || G.t - t0 > 2.5; yield 0.2;
       archSay(S.arch, 'point', VL.l5Intro(), 6); yield vwait(0.2);
       say(S.p, VL.l5IskraGo(), 3); yield vwait(0.2);
-      S.arch.pose = 'idle'; G.freeze = false;
+      S.arch.pose = 'idle'; G.freeze = false; S.introDone = true;   // первая загадка — только после вступления
     })());
   },
   goal(S) {
@@ -81,13 +83,13 @@ const LV5 = {
       else if (near && !S.cam.lock && S.lockAway) { S.cam.lock = S.lockAway; S.lockAway = null; }
     }
     S.ledges.forEach((ld, i) => {
-      if (!ld.started && i === S.solved && p.onGround && Math.abs(p.y - tx(ld.row)) < 2 && p.x > tx(ld.x0) && p.x < tx(ld.x1)) {
+      if (!ld.started && i === S.solved && (i > 0 || S.introDone) && p.onGround && Math.abs(p.y - tx(ld.row)) < 2 && p.x > tx(ld.x0) && p.x < tx(ld.x1)) {
         ld.started = true; S.respawnPt = { x: p.x, y: tx(ld.row) };
         run(LV5.station(S, i));
       }
     });
     if (S.solved >= 5 && !S.topStarted && p.onGround && Math.abs(p.y - tx(S.topRow)) < 2 && p.x > tx(14)) { S.topStarted = true; S.respawnPt = { x: tc(15), y: tx(S.topRow) }; run(LV5.top(S)); }
-    if (S.wp && !S.wp.got && !p.hidden && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run(LV5.finale(S)); }
+    if (S.wp && !S.wp.got && !p.hidden && !G.freeze && Dialog.idle() && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run(LV5.finale(S)); }
     // солнце садится: чем выше Искра, тем темнее
     if (!S.lit) L.night = 0.15 + 0.3 * clamp((tx(44) - p.y) / (tx(44) - tx(14)), 0, 1);
     S.hud.text = (S.weightsHave || 0) + ' из 5';   // табличка = золотые гирьки
@@ -128,7 +130,7 @@ const LV5 = {
         // Щёлк влетает и меняет чаши местами
         const sh = S.shch; sh.vis = true; const p0 = sc.pivot(); sh.x = p0.x + (ld.left ? 600 : -600); sh.y = p0.y - 200; sh.mode = 'goto'; sh.tx = p0.x; sh.ty = p0.y - 60; sh.gotoSpeed = 420;
         yield () => sh.mode === 'arrived';
-        say(sh, VL.l5Sh1(), 3); Sound.laugh(); yield vwait(0.1);
+        Sound.laugh(); say(sh, VL.l5Sh1(), 3); yield vwait(0.1);
         puff(sc.panPt(-1).x, sc.panPt(-1).y - 30, 8); puff(sc.panPt(1).x, sc.panPt(1).y - 30, 8); Sound.whoosh();
         const t = sc.left; sc.left = sc.right; sc.right = t; m.L = sc.left; m.R = sc.right; m.swapped = true;
         yield 0.4;
@@ -218,7 +220,7 @@ const LV5 = {
       say(sh, VL.l5Sorry(), 4); yield vwait(0.2);
       archSay(A, 'idle', VL.l5Forgive(), 6); yield vwait(0.2);
       S.medal = { t: 0 }; Sound.sparkle(); sparkBurst(sh.x, sh.y + 10, 24, '#ffd43b', 260);
-      say(sh, VL.l5Medal(), 3); Sound.laugh(); yield vwait(0.2);
+      Sound.laugh(); say(sh, VL.l5Medal(), 3); yield vwait(0.2);
       A.pose = 'cheer'; say(p, VL.l5Hurray(), 2.5); yield vwait(0.6);
       G.freeze = false; S.complete();
     })();

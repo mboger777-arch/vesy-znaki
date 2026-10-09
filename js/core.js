@@ -4,7 +4,7 @@ const TILE = 64;
 // true, если в assets лежит logo.png (объёмный логотип для заголовка); иначе логотип рисуется шрифтом
 const HAS_LOGO = true;
 const G = {
-  W: 1280, H: 720, scale: 1, ox: 0, oy: 0, dpr: 1, t: 0, rt: 0,
+  W: 1280, H: 720, scale: 1, ox: 0, oy: 0, sl: 0, sr: 0, dpr: 1, t: 0, rt: 0,
   scene: null, muted: false, assertFails: [], touchUI: false, portrait: false,
   timeScale: 1, freeze: false, tasks: [], bubbles: [], particles: [], shake: 0,
   trans: null, ui: [], zoom: 1.3, baseZoom: 1.3,
@@ -58,6 +58,12 @@ function plural(n, one, few, many) {
 const bulkaW = n => plural(n, 'булочка', 'булочки', 'булочек');
 
 // ---------- Экран ----------
+// безопасные зоны (вырез/«чёлка» телефона): CSS env(safe-area-inset-*) через невидимый щуп в index.html
+function safeInsets() {
+  const el = document.getElementById('safe'); if (!el) return { l: 0, r: 0, t: 0, b: 0 };
+  const cs = getComputedStyle(el), f = k => parseFloat(cs[k]) || 0;
+  return { l: f('paddingLeft'), r: f('paddingRight'), t: f('paddingTop'), b: f('paddingBottom') };
+}
 function resize() {
   const cw = window.innerWidth, ch = window.innerHeight;
   G.dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -65,13 +71,17 @@ function resize() {
   G.portrait = ch > cw * 1.05;
   const H = 720;
   let W = Math.round(H * cw / ch);
-  W = clamp(W, 1100, 1600);
+  W = clamp(W, 1100, 1700);
   G.W = W; G.H = H;
   G.scale = Math.min(cw / W, ch / H);
   G.ox = (cw - W * G.scale) / 2; G.oy = (ch - H * G.scale) / 2;
+  // кнопки и табличка не заходят под вырез: отступ в логических пикселях (0 на компьютере)
+  const si = safeInsets();
+  G.sl = Math.max(0, (si.l - G.ox) / G.scale); G.sr = Math.max(0, (si.r - G.ox) / G.scale);
   canvas.width = Math.round(cw * G.dpr); canvas.height = Math.round(ch * G.dpr);
   canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
-  if (G.portrait && typeof Voice !== 'undefined') Voice.stop();
+  // при первом вызове (загрузка в портрете) Voice ещё не объявлен: typeof в «мёртвой зоне» const бросает ошибку → ловим
+  if (G.portrait) { try { Voice.stop(); } catch (_) { } }
   // поворот/смена размера посреди уровня: кадр вопроса пересчитывается под новый экран, рельеф перерисовывается чётко
   const S = G.scene;
   if (S && S.isPlay) {
@@ -81,11 +91,30 @@ function resize() {
   }
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+document.addEventListener('fullscreenchange', () => setTimeout(resize, 60));
+document.addEventListener('webkitfullscreenchange', () => setTimeout(resize, 60));
 resize();
+// ---------- Во весь экран (телефон) ----------
+// Первое касание: полноэкранный режим без панелей браузера + поворот «ландшафт». Вышли из него — снова на следующем касании.
+// Всё молча в try/catch: iPhone в Safari так не умеет (там — «На экран Домой», манифест открывает игру без панелей).
+const FullScreen = {
+  isOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); },
+  request() {
+    if (this.isOn() || URLP.get('fs') === '0') return;
+    const el = document.documentElement;
+    try {
+      const f = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (f) { const p = f.call(el, { navigationUI: 'hide' }); if (p && p.then) p.then(() => this.lock(), () => { }); else this.lock(); }
+    } catch (_) { }
+  },
+  lock() { try { const o = screen.orientation; if (o && o.lock) { const p = o.lock('landscape'); if (p && p.catch) p.catch(() => { }); } } catch (_) { } },
+};
 
 // ---------- Картинки ----------
 const IMG = {};
-const IMG_LIST = ['bg_day.jpg', 'bg_eve.jpg', 'bg_day_soft.jpg', 'bg_day_soft_b.jpg', 'bg_eve_soft.jpg', 'arch_idle', 'arch_point', 'arch_worried', 'arch_cheer', 'bublik', 'iskra_fall', 'iskra_hero', 'iskra_idle', 'iskra_jump', 'iskra_runA', 'iskra_runB', 'iskra_runC',
+const IMG_LIST = ['bg_day.jpg', 'bg_eve.jpg', 'bg_day_soft.jpg', 'bg_day_soft_b.jpg', 'bg_eve_soft.jpg', 'arch_idle', 'arch_point', 'arch_worried', 'arch_cheer', 'bublik', 'ponchik', 'iskra_fall', 'iskra_hero', 'iskra_idle', 'iskra_jump', 'iskra_runA', 'iskra_runB', 'iskra_runC',
   'shchelk_carry', 'shchelk_down', 'shchelk_front', 'shchelk_laugh', 'shchelk_up', 't_basket', 't_bun', 't_bush', 't_crate', 't_fence', 't_flag', 't_grass',
   't_lamp_off', 't_lamp_on', 't_plank', 't_star', 't_stone', 'tex_dirt', 'tex_grass', 'tex_stone'];
 function loadImages() {
@@ -107,6 +136,7 @@ window.addEventListener('keydown', e => {
   const a = KEYMAP[e.code];
   if (a) {
     e.preventDefault();
+    if (a === 'jump' && !Input.k.jump && !e.repeat && G.freeze && Dialog.cur && G.scene && G.scene.isPlay && Dialog.skip()) { Input.k[a] = true; return; }
     if (a === 'jump' && !Input.k.jump) Input.jumpPresses++;
     Input.k[a] = true;
   }
@@ -120,14 +150,14 @@ function touchZone(p) {
   if (!G.touchUI || !G.scene || !G.scene.isPlay) return null;
   const B = touchButtons();
   for (const b of B) { if (Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.35) return b.id; }
-  if (p.y > G.H * 0.45) { if (p.x < 210) return 'left'; if (p.x < 400) return 'right'; if (p.x > G.W - 330) return 'jump'; }
+  if (p.y > G.H * 0.45) { if (p.x < 210 + G.sl) return 'left'; if (p.x < 400 + G.sl) return 'right'; if (p.x > G.W - 330 - G.sr) return 'jump'; }
   return null;
 }
 function touchButtons() {
   return [
-    { id: 'left', x: 110, y: G.H - 110, r: 74 },
-    { id: 'right', x: 285, y: G.H - 110, r: 74 },
-    { id: 'jump', x: G.W - 140, y: G.H - 125, r: 92 },
+    { id: 'left', x: 110 + G.sl, y: G.H - 110, r: 74 },
+    { id: 'right', x: 285 + G.sl, y: G.H - 110, r: 74 },
+    { id: 'jump', x: G.W - 140 - G.sr, y: G.H - 125, r: 92 },
   ];
 }
 function updTouch() {
@@ -140,6 +170,7 @@ canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   Sound.unlock();
   if (e.pointerType === 'touch') G.touchUI = true;
+  if (e.pointerType === 'touch' || G.touchUI) FullScreen.request();
   const p = toLogical(e.clientX, e.clientY);
   // сначала нарисованные кнопки интерфейса
   for (let i = G.ui.length - 1; i >= 0; i--) {
@@ -148,6 +179,8 @@ canvas.addEventListener('pointerdown', e => {
   }
   // коснулся блока с ответом — Искра сама подбегает и бьёт его головой (удобно пальцем и мышкой)
   if (G.scene && G.scene.tapBlock && G.scene.tapBlock(p.x, p.y)) return;
+  // касание в сценке (не по кнопкам управления) — текущая реплика мягко стихает, дальше следующая
+  if (G.freeze && Dialog.cur && G.scene && G.scene.isPlay && !touchZone(p) && Dialog.skip()) return;
   const z = touchZone(p);
   if (z) { Input.ptr.set(e.pointerId, z); updTouch(); try { canvas.setPointerCapture(e.pointerId); } catch (_) { } return; }
   if (G.scene && G.scene.onTap) G.scene.onTap(p.x, p.y);
@@ -211,7 +244,7 @@ const Sound = {
   bump() { this.tone(140, 0.14, 'triangle', 0.3, 0, 90); this.noise(0.06, 0.12, 900); },
   correct() { [523, 659, 784, 1047].forEach((f, i) => { this.tone(f, 0.35, 'triangle', 0.16, i * 0.09); this.tone(f * 2, 0.3, 'sine', 0.05, i * 0.09); }); },
   wrong() { this.tone(392, 0.22, 'sine', 0.16, 0, 300); this.tone(300, 0.3, 'sine', 0.14, 0.18, 240); },
-  fanfare() { const m = [[523, 0], [659, .12], [784, .24], [1047, .36], [784, .55], [1047, .68]]; m.forEach(([f, t]) => { this.tone(f, 0.3, 'square', 0.06, t); this.tone(f, 0.4, 'triangle', 0.14, t); }); this.tone(1319, 0.9, 'triangle', 0.12, 0.85); this.tone(1047, 0.9, 'sine', 0.1, 0.85); },
+  fanfare() { Voice.hold(1.3); const m = [[523, 0], [659, .12], [784, .24], [1047, .36], [784, .55], [1047, .68]]; m.forEach(([f, t]) => { this.tone(f, 0.3, 'square', 0.06, t); this.tone(f, 0.4, 'triangle', 0.14, t); }); this.tone(1319, 0.9, 'triangle', 0.12, 0.85); this.tone(1047, 0.9, 'sine', 0.1, 0.85); },
   pop() { this.tone(880, 0.08, 'sine', 0.15, 0, 1500); },
   count(i) { const sc = [523, 587, 659, 698, 784, 880, 988, 1047, 1175, 1319, 1397]; this.tone(sc[clamp(i, 0, 10)], 0.22, 'triangle', 0.2); },
   puff() { this.noise(0.35, 0.18, 1600, 0, 'bandpass', 0.6, 300); this.tone(500, 0.2, 'sine', 0.08, 0, 200); },
@@ -221,7 +254,7 @@ const Sound = {
   thunder() { this.noise(2.2, 0.12, 180, 0, 'lowpass', 0.5, 60); },
   bounce() { this.tone(260, 0.2, 'square', 0.06, 0, 780); this.tone(520, 0.18, 'sine', 0.1, 0.02, 1200); },
   // сорока: хриплое «ча-ча-ча» (шум через полосовой фильтр + писк вверх)
-  laugh() { [0, .11, .22, .33].forEach((t, i) => { this.noise(0.07, 0.07, 2600 - i * 150, t, 'bandpass', 6, 1800); this.tone(1500 + i * 60, 0.06, 'square', 0.025, t, 1100); }); },
+  laugh() { if (Voice.busy()) return; Voice.hold(0.45); [0, .11, .22, .33].forEach((t, i) => { this.noise(0.07, 0.07, 2600 - i * 150, t, 'bandpass', 6, 1800); this.tone(1500 + i * 60, 0.06, 'square', 0.025, t, 1100); }); },
   // сорока: щебет «чир-рик» (два быстрых свиста вверх)
   chirp() { this.tone(2200, 0.07, 'sine', 0.07, 0, 3600); this.tone(2600, 0.09, 'sine', 0.06, 0.09, 4200); this.noise(0.05, 0.03, 4000, 0.02, 'bandpass', 8); },
   // кот Бублик: мурлыканье — низкий пульсирующий рокот ~24 Гц
@@ -234,7 +267,7 @@ const Sound = {
     s.connect(fl); fl.connect(am); am.connect(g); g.connect(this.sfx); s.start(t); lfo.start(t); s.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
   },
   // Искра: «Ура!» — заранее записанный нейроголосом клип (работает и с file://)
-  ura() { if (G.muted) return; try { if (!this.uraEl) this.uraEl = new Audio('assets/sfx/ura.mp3'); this.uraEl.currentTime = 0; this.uraEl.volume = 0.9; Voice.played.push({ k: 'sfx|ура', f: '../sfx/ura.mp3', t: performance.now() / 1000, d: 0.55, muted: false, sfx: true }); const p = this.uraEl.play(); if (p && p.catch) p.catch(() => { }); } catch (_) { } },
+  ura() { if (G.muted) return; Voice.hold(0.7); try { if (!this.uraEl) { this.uraEl = new Audio('assets/sfx/ura.mp3'); this.uraEl.addEventListener('playing', () => Voice.hold(0.85)); } /* пауза — от настоящего начала «Ура!» */ this.uraEl.currentTime = 0; this.uraEl.volume = 0.9; Voice.played.push({ k: 'sfx|ура', f: '../sfx/ura.mp3', t: performance.now() / 1000, d: 0.55, muted: false, sfx: true }); const p = this.uraEl.play(); if (p && p.catch) p.catch(() => { }); } catch (_) { } },
   click() { this.tone(700, 0.06, 'sine', 0.12, 0, 900); },
   whoosh() { this.noise(0.4, 0.1, 600, 0, 'bandpass', 1.2, 2400); },
   // новые звуки: светлячок, пружинящий стог, плот, подъёмник, лужа, ветерок, секрет
@@ -247,7 +280,7 @@ const Sound = {
   splashSmall() { this.noise(0.2, 0.08, 1900, 0, 'bandpass', 1, 600); this.tone(700, 0.08, 'sine', 0.04, 0, 1100); },
   gust() { this.noise(1.7, 0.07, 450, 0, 'bandpass', 1.3, 1300); this.noise(1.2, 0.04, 1200, 0.3, 'bandpass', 2, 500); },
   secret() { [784, 988, 1175, 1568, 1976].forEach((f, i) => { this.tone(f, 0.4, 'triangle', 0.13, i * 0.08); this.tone(f * 2, 0.3, 'sine', 0.04, i * 0.08); }); this.noise(0.9, 0.04, 7000, 0.2, 'highpass'); },
-  duck(on) { if (!this.ctx || !this.mus) return; this.mus.gain.setTargetAtTime(on ? 0.06 : 0.16, this.ctx.currentTime, on ? 0.08 : 0.4); },
+  duck(on) { if (!this.ctx || !this.mus) return; const g = this.mus.gain, t = this.ctx.currentTime; try { g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); } catch (_) { } g.setTargetAtTime(on ? 0.05 : 0.16, on ? t : t + 0.7, on ? 0.08 : 0.5); }, // под речью музыка тише (−10 дБ); между репликами диалога не «качается»
   setMode(m) { this.pending = m !== this.mode ? m : null; if (!this.ctx) { this.mode = m; this.pending = null; } },
   startMusic() {
     if (this.timer) return;
@@ -299,12 +332,22 @@ const Sound = {
 // ---------- Голос: живая озвучка (заранее записанные нейроголоса, assets/voice/*.mp3) ----------
 // Никакого системного синтеза речи. Реплика → файл по таблице VOICE_FILES (js/voice_manifest.js).
 // Один общий <audio>: так звук работает и с file://, и на iPhone (элемент «разблокирован» первым касанием).
-// Пока говорит герой — музыка тише. Новая реплика обрывает прежнюю. Выключается кнопкой звука и ?voice=0.
+// Пока говорит герой — музыка тише. Реплики идут ОЧЕРЕДЬЮ (Dialog ниже): новая не начинается и не обрывает прежнюю.
+// «Занят» — по настоящему звуку (<audio> играет), а не по таймеру: на медленной сети файл может начаться позже.
 const VOICED = { arch: 1, bublik: 1, ponchik: 1, shchelk: 1, iskra: 1, narrator: 1 };
 const Voice = {
-  enabled: URLP.get('voice') !== '0', el: null, cur: null, missing: [], played: [], endT: 0, unlocked: false,
-  SIL: 'data:audio/mpeg;base64,SUQzBAAAAAAAIlRTU0UAAAAOAAADTGF2ZjYxLjcuMTAzAAAAAAAAAAAAAAD/84TAAAAAAAAAAAAASW5mbwAAAA8AAAAFAAACoABtbW1tbW1tbW1tbW1tbW1tbW1tkpKSkpKSkpKSkpKSkpKSkpKSkpK2tra2tra2tra2tra2tra2tra2ttvb29vb29vb29vb29vb29vb29vb//////////////////////////8AAAAATGF2YzYxLjE5AAAAAAAAAAAAAAAAJARQAAAAAAAAAqC9P8vrAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/80TEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TEUwAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TEpgAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80TErAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80TErAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=',
-  init() { try { this.el = new Audio(); this.el.preload = 'auto'; this.el.addEventListener('ended', () => this.onEnd()); this.el.addEventListener('error', () => { if (this.cur) { console.warn('VOICE LOAD FAIL: ' + this.cur); this.onEnd(); } }); } catch (_) { } },
+  enabled: URLP.get('voice') !== '0', el: null, cur: null, missing: [], played: [], endT: 0, holdT: 0, deadline: 0, unlocked: false, fade: 0,
+  SIL: 'data:audio/mpeg;base64,SUQzBAAAAAAAIlRTU0UAAAAOAAADTGF2ZjYxLjcuMTAzAAAAAAAAAAAAAAD/84TAAAAAAAAAAAAASW5mbwAAAA8AAAAFAAACoABtbW1tbW1tbW1tbW1tbW1tbW1tkpKSkpKSkpKSkpKSkpKSkpKSkpK2tra2tra2tra2tra2tra2tra2ttvb29vb29vb29vb29vb29vb29vb//////////////////////////8AAAAATGF2YzYxLjE5AAAAAAAAAAAAAAAAJARQAAAAAAAAAqC9P8vrAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/80TEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TEUwAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TEpgAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80TErAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80TErAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=',
+  init() {
+    try {
+      this.el = new Audio(); this.el.preload = 'auto';
+      this.el.addEventListener('ended', () => this.onEnd());
+      this.el.addEventListener('playing', () => { if (this.cur && isFinite(this.el.duration)) this.endT = G.t + Math.max(0, this.el.duration - this.el.currentTime); });
+      // звук реально идёт — сдвигаем «аварийный» срок от текущей позиции (медленный телефон не обрежет реплику)
+      this.el.addEventListener('timeupdate', () => { if (this.cur && isFinite(this.el.duration)) this.deadline = Math.max(this.deadline, G.t + Math.max(0, this.el.duration - this.el.currentTime) + 3); });
+      this.el.addEventListener('error', () => { if (this.cur) { console.warn('VOICE LOAD FAIL: ' + this.cur); this.onEnd(); } });
+    } catch (_) { }
+  },
   unlock() {
     if (this.unlocked || !this.el) return; this.unlocked = true;
     try { if (!this.cur) { this.el.src = this.SIL; const p = this.el.play(); if (p && p.catch) p.catch(() => { }); } } catch (_) { }
@@ -315,24 +358,45 @@ const Voice = {
     if (!v) { this.missing.push(kind + '|' + text); console.warn('VOICE MISSING: ' + kind + '|' + text); return 0; }
     this.played.push({ k: kind + '|' + text, f: v[0], t: performance.now() / 1000, d: v[1], muted: !!(G.muted || !this.enabled) });
     if (this.played.length > 400) this.played.shift();
-    this.endT = G.t + v[1];
+    this.endT = G.t + v[1]; this.deadline = G.t + v[1] + 4;   // сеть зависла — не ждём вечно
     if (!this.enabled || G.muted || !this.el) return v[1];
     try {
-      this.el.pause(); this.cur = v[0];
+      this.clearFade(); this.el.pause(); this.cur = v[0];
       this.el.src = 'assets/voice/' + v[0]; this.el.currentTime = 0; this.el.volume = 1;
-      const p = this.el.play(); if (p && p.catch) p.catch(() => { });
+      const p = this.el.play(); if (p && p.catch) p.catch(() => { if (this.cur === v[0]) { this.cur = null; Sound.duck(false); } });
       Sound.duck(true);
     } catch (_) { }
     return v[1];
   },
-  busy() { return G.t < this.endT; },
-  onEnd() { this.cur = null; Sound.duck(false); },
-  stop() { this.endT = 0; if (this.el && this.cur) { try { this.el.pause(); } catch (_) { } } this.cur = null; Sound.duck(false); },
+  // идёт ли сейчас речь: настоящий звук (или таймер, если звук выключен / не загрузился), плюс пауза-«держатель» после «Ура!»/смеха
+  busy() {
+    if (G.t < this.holdT) return true;
+    if (this.cur && this.el && !this.el.paused && !this.el.ended) {
+      if (G.t > this.deadline) { console.warn('VOICE STALL: ' + this.cur); this.stop(); return false; }
+      return true;
+    }
+    return !this.cur && G.t < this.endT && (G.muted || !this.enabled || !this.el);
+  },
+  hold(t) { this.holdT = Math.max(this.holdT, G.t + t); },
+  onEnd() { this.cur = null; this.endT = 0; Sound.duck(false); },
+  clearFade() { if (this.fade) { clearInterval(this.fade); this.fade = 0; if (this.el) this.el.volume = 1; } },
+  // soft: короткое затухание (касание «дальше»), без щелчка
+  stop(soft, why = 'skip') {
+    this.endT = 0; this.holdT = 0;
+    const el = this.el;
+    if (el && this.cur) {
+      if (soft) el.__stopWhy = { f: this.cur, why };
+      if (soft && !this.fade) {
+        let v = 1; this.fade = setInterval(() => { v -= 0.25; if (v <= 0) { this.clearFade(); try { el.pause(); } catch (_) { } } else { try { el.volume = v; } catch (_) { } } }, 22);
+      } else if (!soft) { this.clearFade(); try { el.pause(); } catch (_) { } }
+    }
+    this.cur = null; Sound.duck(false);
+  },
 };
 Voice.init();
 document.addEventListener('visibilitychange', () => { if (document.hidden) Voice.stop(); });
-// ждать в сценарии: не меньше t секунд и пока герой договорит
-function vwait(t = 0) { const t0 = G.t; return () => G.t - t0 >= t && !Voice.busy() && G.bubbles.every(b => b.t >= b.dur - 0.4); }
+// ждать в сценарии: не меньше t секунд и пока очередь реплик пуста и никто не говорит
+function vwait(t = 0) { const t0 = G.t; return () => G.t - t0 >= t && Dialog.idle(); }
 try { G.muted = localStorage.getItem('vz_plat_muted') === '1'; } catch (_) { }
 
 // ---------- Рисование ----------
@@ -566,28 +630,80 @@ function updateTasks(dt) {
 }
 
 // ---------- Пузыри речи ----------
+// Очередь реплик: в каждый момент говорит ОДИН герой и виден ОДИН пузырь. Следующая реплика начинается,
+// только когда прежняя договорена (по настоящему звуку) и прочитана, плюс пауза GAP. Касание в сценке — мягко «дальше».
+const Dialog = {
+  q: [], cur: null, lastEnd: -9, GAP: 0.3,
+  reset() { this.q = []; this.cur = null; this.lastEnd = -9; },
+  idle() { return !this.cur && !this.q.length && !Voice.busy(); },
+  canStart() { return !this.cur && !Voice.busy() && G.t - this.lastEnd >= this.GAP; },
+  start(b) {
+    const who = b.who;
+    G.bubbles = G.bubbles.filter(o => o.t < o.dur - 0.3 && o.who !== who);
+    for (const o of G.bubbles) o.t = Math.max(o.t, o.dur - 0.25);
+    const v = who && VOICED[who.kind] ? Voice.get(who.kind, b.text) : null;
+    // сорока сначала чирикает, потом говорит (звук не ложится на голос); кот не мурчит поверх своей речи
+    b.vdelay = 0;
+    if (who && who.kind === 'shchelk') { Sound.chirp(); b.vdelay = 0.22; }
+    else if (who && who.kind === 'bublik' && !v) Sound.purr();
+    const vd = v ? v[1] : 0;
+    b.voice = vd; b.spoken = false;
+    b.dur = Math.max(b.dur0 || clamp(2.2 + b.text.length * 0.055, 2.6, 6.5), vd ? vd + b.vdelay + 0.5 : 0);
+    b.t = 0; G.bubbles.push(b); this.cur = b;
+    if (!b.vdelay) this.speakNow(b);
+    if (who && who.talk !== undefined) who.talk = Math.max(0.5, vd + b.vdelay);
+  },
+  speakNow(b) {
+    b.spoken = true;
+    if (b.who && VOICED[b.who.kind]) { const vd = Voice.speak(b.text, b.who.kind); if (vd) b.vEnd = b.t + vd; }
+  },
+  update() {
+    const b = this.cur;
+    if (b) {
+      if (!b.spoken && b.t >= b.vdelay) this.speakNow(b);
+      const speaking = !b.spoken || Voice.busy();
+      if (speaking) b.t = Math.min(b.t, b.dur - 0.45);   // пока звучит голос — пузырь не гаснет
+      // реплика закончена: голос договорён и текст прочитан; если ждёт следующая — не тянем
+      const read = b.t >= b.dur - 0.4 || (this.q.length && b.t >= (b.vEnd || 0) + 0.15);
+      if (!speaking && read) this.finish(b);
+      else if (G.bubbles.indexOf(b) < 0) this.finish(b);   // пузырь сняли (смена сцены)
+    }
+    if (this.q.length && this.canStart()) this.start(this.q.shift());
+  },
+  finish(b) { b.t = Math.max(b.t, b.dur - 0.25); this.cur = null; this.lastEnd = G.t; },
+  // касание/пробел в сценке: текущая реплика мягко стихает, пузырь гаснет — сразу следующая
+  skip() {
+    const b = this.cur; if (!b || b.t < 0.35) return false;
+    if (b.spoken && Voice.busy()) Voice.stop(true);
+    Voice.holdT = 0; this.finish(b); this.lastEnd = G.t - this.GAP + 0.12; return true;
+  },
+};
 function say(who, text, dur = null, opts = {}) {
-  G.bubbles = G.bubbles.filter(b => b.who !== who);
-  // одновременно говорит один герой: прежние пузыри мягко гаснут
-  for (const o of G.bubbles) o.t = Math.max(o.t, o.dur - 0.25);
-  // реплика звучит живым голосом; пузырь держится, пока герой не договорит
-  const vd = who && VOICED[who.kind] ? Voice.speak(text, who.kind) : 0;
-  if (who && who.kind === 'shchelk') Sound.chirp(); else if (who && who.kind === 'bublik') Sound.purr();
-  const d = Math.max(dur || clamp(2.2 + text.length * 0.055, 2.6, 6.5), vd ? vd + 0.5 : 0);
-  const b = { who, text, t: 0, dur: d, opts, voice: vd };
-  G.bubbles.push(b);
-  if (who && who.talk !== undefined) who.talk = Math.max(0.5, vd);
+  const b = { who, text, t: 0, dur: 99, dur0: dur, opts, voice: 0, queued: true };
+  // подсказки на ошибку не копятся: в очереди остаётся только самая свежая
+  if (opts.drop) Dialog.q = Dialog.q.filter(o => !o.opts.drop);
+  // тот же герой уже ждёт в очереди с другой репликой-подсказкой — заменяем
+  Dialog.q.push(b);
+  if (Dialog.q.length === 1 && Dialog.canStart()) Dialog.start(Dialog.q.shift());
   return b;
 }
 // рассказчик: нет рта — его слова на свитке-ленте вверху экрана (рисованный, не системный)
 const NARR = { kind: 'narrator', narrator: true, talk: 0 };
 function narrRect(c, text) {
-  c.font = font(32, 800); const lines = wrapText(c, text, Math.min(900, G.W - 260));
+  c.font = font(32, 800); const lines = wrapText(c, text, Math.min(900, G.W - 260 - G.sl - G.sr));
   let tw = 0; for (const l of lines) tw = Math.max(tw, c.measureText(l).width);
-  const w = tw + 120, h = lines.length * 40 + 34; return { x: G.W / 2 - w / 2, y: 18, w, h, lines };
+  const w = tw + 120, h = lines.length * 40 + 34, x = G.W / 2 - w / 2;
+  // свиток не ложится на табличку, доску вопроса и кнопки (верхний ряд до y≈100) и не закрывает лица/считаемое:
+  // пробуем под верхним рядом, ниже, и внизу экрана — берём место с наименьшим перекрытием
+  const avoid = G.avoid || [];
+  const cost = y => { let s = 0; for (const a of avoid) { const ox = Math.min(x - 30 + w + 60, a.x + a.w) - Math.max(x - 30, a.x), oy = Math.min(y + h + 8, a.y + a.h) - Math.max(y - 8, a.y); if (ox > 0 && oy > 0) s += ox * oy * (a.counted ? 12 : a.face ? 4 : 2); } return s; };
+  let best = null;
+  for (const [y, pen] of [[112, 0], [150, 400], [196, 900], [G.H - h - 26, 1500]]) { const sc = cost(y) + pen; if (!best || sc < best.sc) best = { y, sc }; }
+  return { x, y: best.y, w, h, lines };
 }
 function drawNarr(c, b) {
   const r = narrRect(c, b.text), k = Math.min(1, b.t / 0.3), out = b.dur - b.t < 0.3 ? (b.dur - b.t) / 0.3 : 1;
+  if (b.ny == null) b.ny = r.y; r.y = b.ny;   // место выбирается один раз — свиток не прыгает
   b.rect = { x: r.x - 30, y: r.y, w: r.w + 60, h: r.h + 8 };
   c.save(); c.globalAlpha = Math.min(1, out * 1.4); c.translate(0, -(1 - easeOut(k)) * 40);
   const { x, y, w, h } = r;
@@ -612,10 +728,10 @@ function drawBubble(c, b, cam) {
   c.font = font(size, 800);
   // ищем место: не закрывать лица, блоки, корзину, вывеску и HUD; хвостик всегда тянется ко рту
   const avoid = G.avoid || [];
-  const ovl = (x, y, w, h) => { let s = 0; for (const a of avoid) { const ox = Math.min(x + w, a.x + a.w) - Math.max(x, a.x), oy = Math.min(y + h, a.y + a.h) - Math.max(y, a.y); if (ox > 0 && oy > 0) s += ox * oy * (a.counted ? 12 : a.face ? 3 : 1); } return s; };
+  const ovl = (x, y, w, h) => { let s = 0; for (const a of avoid) { const ox = Math.min(x + w, a.x + a.w) - Math.max(x, a.x), oy = Math.min(y + h, a.y + a.h) - Math.max(y, a.y); if (ox > 0 && oy > 0) s += ox * oy * (a.counted ? 12 : a.face ? 3 : a.hud ? 4 : 1); } return s; };
   let best = null;
   const tryC = (bx, by, w, h, lines, side, pen) => {
-    bx = clamp(bx, 12, G.W - w - 12); by = clamp(by, 8, G.H - h - 8);
+    bx = clamp(bx, 12 + G.sl, G.W - w - 12 - G.sr); by = clamp(by, 8, G.H - h - 8);
     let sc = ovl(bx, by, w, h) * 4 + pen + Math.abs((bx + w / 2) - mx) * 0.6 + Math.abs(by + h - hy) * 0.5;
     // хвостик тоже не должен перечёркивать то, что считаем, и чужие лица
     if (!side) {

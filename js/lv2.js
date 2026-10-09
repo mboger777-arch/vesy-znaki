@@ -120,10 +120,11 @@ const LV2 = {
     const p = S.p;
     for (const st of S.stations) if (!st.started && p.onGround && p.x > tx(st.E - 9) && p.x < tx(st.E) && Math.abs(p.y - tx(10)) < 2 && !(S.q && !S.q.solved)) { st.started = true; S.cur = st; S.respawnPt = { x: tc(st.E - 8), y: tx(10) }; run(LV2.station(S, st)); }
     S.hud.text = (S.weightsHave || 0) + ' из 5';   // табличка = золотые гирьки, как в прологе
-    if (S.wp && !S.wp.got && !p.hidden && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l2Got(), 3); })()); }
+    if (S.wp && !S.wp.got && !p.hidden && !G.freeze && Dialog.idle() && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l2Got(), 3); })()); }
     if (!S.done && !S.flag.locked && overlap(p, S.flag.x - 30, S.flag.y - 190, 60, 190)) { S.flag.on = true; S.complete(); }
   },
-  lock(S, st) { return fitLock(tx(st.E - 10) + 10, tx(st.E + 8) + 40, tx(7) - 126); },
+  // у третьего моста в кадре и Щёлк на дальнем берегу (он говорит в сценке — пузырь только у видимого рта)
+  lock(S, st) { return fitLock(tx(st.E - 10) + 10, st.i === 2 ? tx(st.E + 9) + 70 : tx(st.E + 8) + 40, tx(7) - 126); },
   *flyStones(S, st, side, n, out) {
     const br = st.br;
     for (let k = 0; k < n; k++) {

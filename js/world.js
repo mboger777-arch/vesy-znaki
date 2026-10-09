@@ -616,22 +616,22 @@ class Lantern extends Ent {
   }
 }
 
-// герои-собеседники: Архимед (4 позы), Бублик, Пончик (соперник Бублика — тот же кот в другом цвете)
+// герои-собеседники: Архимед (4 позы), Бублик (кот-пекарь), Пончик (медвежонок-продавец фруктов, соперник Бублика; свой рисунок)
 const NPC_NAME = { arch: 'Архимед', bublik: 'Бублик', ponchik: 'Пончик' };
 // рот (доля ширины от центра, доля высоты сверху) для каждой картинки; Архимед — из tools/process_arch.py (assets/arch_meta.js)
-const NPC_MOUTH = { bublik: [0.475, 0.29], ponchik: [0.475, 0.29] };
+const NPC_MOUTH = { bublik: [0.475, 0.29], ponchik: [0.545, 0.308] };   // ponchik: рот медвежонка на assets/ponchik.png
 function archMeta(pose) { return (typeof ARCH_META !== 'undefined' && ARCH_META[pose]) || { mx: 0.5, my: 0.2 }; }
 class NPC extends Ent {
   constructor(kind, x, y, face = 1) {
     super(x, y); this.kind = kind; this.face = face; this.talk = 0; this.hop = 0; this.z = -2; this.alpha = 1; this.mood = 0; this.pose = 'idle';
-    this.h = kind === 'arch' ? 150 : 124;   // Архимед чуть выше Искры (114)
+    this.h = kind === 'arch' ? 150 : kind === 'ponchik' ? 132 : 124;   // Архимед чуть выше Искры (114); медвежонок чуть крупнее кота
     this.ph = frand(0, 6); this.nodT = frand(2, 4); this.nod = 0; this.waveT = frand(1, 3); this.wave = 0;
   }
   // поза «ура» (руки вверх, в прыжке) показывается ТОЛЬКО во время двух коротких прыжков, после — снова стоит
   get apose() { return this.cheerT > 0 ? 'cheer' : (this.pose === 'cheer' ? 'idle' : this.pose); }
   get im() {
     if (this.kind === 'arch') return IMG['arch_' + this.apose] || IMG.arch_idle;
-    if (this.kind === 'ponchik') return filteredImg(IMG.bublik, 'hue-rotate(185deg) saturate(0.85) brightness(1.08)');
+    if (this.kind === 'ponchik') return IMG.ponchik;   // медвежонок-продавец фруктов (свой рисунок, не перекрашенный Бублик)
     return IMG.bublik;
   }
   update(dt) {

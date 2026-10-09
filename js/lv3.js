@@ -118,7 +118,7 @@ const LV3 = {
     // с каждыми воротами ночь чуть глубже
     S.L.night = 0.55 + S.stations.filter(s => s.done).length * 0.08;
     if (!S.endStarted && S.stations[3].done && p.x > tx(106)) { S.endStarted = true; run(LV3.ending(S)); }
-    if (S.wp && !S.wp.got && !p.hidden && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l3Got(), 3); })()); }
+    if (S.wp && !S.wp.got && !p.hidden && !G.freeze && Dialog.idle() && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l3Got(), 3); })()); }
     if (!S.done && !S.flag.locked && overlap(p, S.flag.x - 30, S.flag.y - 190, 60, 190)) { S.flag.on = true; S.complete(); }
   },
   lock(S, st) { return fitLock(tx(st.X0) + 20, tx(st.X0 + 16) + 60, tx(10) - 330 - 40 - 90); },
@@ -136,7 +136,7 @@ const LV3 = {
         // Щёлк подлетает к левой банке и выпускает светлячков
         const sh = S.shch, j = tr.jarTop(-1); sh.vis = true; sh.x = S.cam.x + viewW() + 60; sh.y = j.y - 60; sh.mode = 'goto'; sh.tx = j.x + 10; sh.ty = j.y - 40; sh.gotoSpeed = 420;
         yield () => sh.mode === 'arrived';
-        say(sh, VL.l3Sh1(), 2.5); Sound.laugh(); yield 0.5;
+        Sound.laugh(); say(sh, VL.l3Sh1(), 2.5); yield 0.5;
         for (let q = 0; q < m.k; q++) { tr.n[0]--; spawn({ type: 'firefly', x: j.x + frand(-10, 10), y: j.y + 20, vx: frand(-60, 60), vy: frand(-140, -90), life: 2.5, size: 4, ph: frand(0, 6) }); Sound.firefly(q); yield 0.45; }
         yield vwait(0.2); sh.mode = 'goto'; sh.tx = S.cam.x - 200; sh.ty = j.y - 200; archSay(A, 'worried', VL.l3B1(m.k), 4); yield vwait(0.2);
         yield 0.8; sh.vis = false;

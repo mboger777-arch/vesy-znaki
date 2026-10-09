@@ -28,15 +28,16 @@ const LV1 = {
       [[52.5, 10], [55, 8], [56, 8], [61, 7], [58.5, 10], [64, 10], [53.5, 10]],
       [[94, 10], [96, 8], [97, 8], [102, 7], [103, 7], [99.5, 10], [92.5, 10]],
     ];
-    const kinds = ['bun', 'apple', 'pear'];
+    // товар у каждого свой: Бублик (слева) — булочки, Пончик (справа) — фрукты; Искра кладёт собранное на ЛЕВУЮ чашу
+    const kinds = [['bun', 'apple'], ['apple', 'apple'], ['bun', 'pear']];
     S.stations = [];
     [24, 66, 106].forEach((X0, i) => {
-      const m = S.math.st[i], carry = i === 1 ? m.R : m.L, fill = i === 1 ? m.L : m.R;
-      const sc = L.add(new Scales(tx(X0 + 15) + 32, tx(10), { item: kinds[i], left: i === 1 ? fill : 0, right: i === 1 ? 0 : fill }));
-      const items = spots[i].slice(0, carry).map(([c, r]) => L.add(new Pickup(kinds[i], tc(c), tx(r))));
+      const m = S.math.st[i], carry = m.L, fill = m.R, [kL, kR] = kinds[i];
+      const sc = L.add(new Scales(tx(X0 + 15) + 32, tx(10), { item: kL, leftKind: kL, rightKind: kR, left: 0, right: fill }));
+      const items = spots[i].slice(0, carry).map(([c, r]) => L.add(new Pickup(kL, tc(c), tx(r))));
       const bub = L.add(new NPC('bublik', tx(X0 + 10) + 56, tx(10), 1));
       const pon = L.add(new NPC('ponchik', tx(X0 + 15) + 32 + 282, tx(10), -1));
-      S.stations.push({ i, X0, sc, items, carry, fill, side: i === 1 ? 1 : -1, bub, pon, started: false, done: false, cols: [X0 + 3, X0 + 5, X0 + 7] });
+      S.stations.push({ i, X0, sc, items, carry, fill, side: -1, bub, pon, started: false, done: false, cols: [X0 + 3, X0 + 5, X0 + 7] });
     });
     S.flag = L.add(new Flag(tc(146), tx(10), true)); S.flag.locked = true;
     S.shch = L.add(new Shchelk(tx(152), tx(4))); S.shch.vis = false; S.shch.mode = 'arrived';
@@ -71,7 +72,7 @@ const LV1 = {
     }
     S.hud.text = (S.weightsHave || 0) + ' из 5';   // табличка = золотые гирьки, как в прологе
     if (!S.endStarted && S.stations[2].done && p.x > tx(133)) { S.endStarted = true; run(LV1.ending(S)); }
-    if (S.wp && !S.wp.got && !p.hidden && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l1Got(), 3); })()); }
+    if (S.wp && !S.wp.got && !p.hidden && !G.freeze && Dialog.idle() && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l1Got(), 3); })()); }
     if (!S.done && !S.flag.locked && overlap(p, S.flag.x - 30, S.flag.y - 190, 60, 190)) { S.flag.on = true; S.complete(); }
   },
   lock(S, st) { return fitLock(tx(st.X0) + 30, st.pon.x + 64, tx(7) - 126); },
@@ -84,7 +85,7 @@ const LV1 = {
       S.cam.lock = LV1.lock(S, st);
       yield 0.5;
       // спор торговцев — у каждой станции свой
-      const kind = sc.item;
+      const kind = sc.kindOf(st.side);   // то, что Искра кладёт (левая чаша)
       if (st.i === 0) { say(st.bub, VL.l1A1(), 3); yield vwait(0.2); say(st.pon, VL.l1A2(), 3); yield vwait(0.2); archSay(A, 'point', VL.l1A3(), 4); }
       else if (st.i === 1) { say(st.pon, VL.l1B1(), 3); yield vwait(0.2); say(st.bub, VL.l1B2(), 3); yield vwait(0.2); archSay(A, 'point', VL.l1B3(), 4); }
       else { say(st.bub, VL.l1C1(), 3); yield vwait(0.2); say(st.pon, VL.l1C2(), 3); yield vwait(0.2); archSay(A, 'point', VL.l1C3(), 4); }
@@ -103,7 +104,7 @@ const LV1 = {
       G.freeze = false;
       const sign = signOf(m.L, m.R);
       const ans = st.i === 1 ? wordOf(m.R, m.L) : wordOf(m.L, m.R);
-      const qLine = st.i === 0 ? VL.l1QA(kind) : st.i === 1 ? VL.l1QB(kind) : VL.l1QC(kind);
+      const qLine = st.i === 0 ? VL.l1QA(sc.kindOf(-1), sc.kindOf(1)) : st.i === 1 ? VL.l1QB(sc.kindOf(1)) : VL.l1QC(sc.kindOf(-1), sc.kindOf(1));
       S.ask({
         text: `${m.L} ? ${m.R}`, answer: ans, choices: signChoices(S.rng, WORDS), wide: true, row: 7, cols: st.cols, speaker: A,
         say: qLine, eqDone: `${m.L} ${sign} ${m.R}`,
@@ -134,7 +135,7 @@ const LV1 = {
       S.cam.lock = { x: tx(139), y: tx(10) - viewH() * 0.62 };
       sh.vis = true; sh.weight = true; sh.x = tx(150); sh.y = tx(4); sh.mode = 'goto'; sh.tx = tx(141); sh.ty = tx(5); sh.gotoSpeed = 380;
       yield () => sh.mode === 'arrived';
-      say(sh, VL.l1Sh1(), 3); Sound.laugh(); yield vwait(0.2);
+      Sound.laugh(); say(sh, VL.l1Sh1(), 3); yield vwait(0.2);
       // гирька тяжёлая: Щёлк роняет её на навес
       sh.weight = false; const wp = S.L.add(new WeightPickup(tx(139) + 32, tx(8))); S.wp = wp; puff(wp.x, wp.y - 20, 8); Sound.bump();
       say(sh, VL.l1Sh2(), 3); yield vwait(0.2);
@@ -143,6 +144,16 @@ const LV1 = {
       yield 0.6; S.cam.lock = null; G.freeze = false;
       yield 2; sh.vis = false;
     })();
+  },
+  // товар на рыночных весах пузыри не закрывают и в разговоре (его потом считают)
+  // пузыри не закрывают ни товар, ни сами чаши (даже пустая чаша должна быть видна)
+  avoidRects(S) {
+    const out = [];
+    for (const st of S.stations) {
+      const sc = st.sc; out.push(...sc.itemRects(-1), ...sc.itemRects(1));
+      for (const sd of [-1, 1]) { const p = sc.panPt(sd), h = itemH(sc.kindOf(sd), sc.sz) * 1.9; out.push({ x: p.x - sc.panW / 2 - 4, y: p.y - h, w: sc.panW + 8, h: h + 40 }); }
+    }
+    return out.map(r => ({ x: r.x - 6, y: r.y - 6, w: r.w + 12, h: r.h + 12, counted: true }));
   },
   counted(S) {
     const st = S.cur; if (!st || !asking(S)) return null;

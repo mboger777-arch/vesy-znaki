@@ -74,7 +74,7 @@ class TitleScene {
     goldButton(c, bx, by, bw, bh, 'Играть', 60, Math.sin(this.t * 4) * 0.035);
     addButton(bx, by, bw, bh, () => this.onEnter(), 'play');
     drawParticles(c, 'world');
-    roundIconButton(c, G.W - 84, 18, 66, G.muted ? 'mute' : 'sound'); addButton(G.W - 84, 18, 66, 66, () => Sound.toggle(), 'sound');
+    roundIconButton(c, G.W - 84 - G.sr, 18, 66, G.muted ? 'mute' : 'sound'); addButton(G.W - 84 - G.sr, 18, 66, 66, () => Sound.toggle(), 'sound');
   }
   onEnter() { goScene(() => (typeof PROLOGUE !== 'undefined' && !prologueSeen()) ? new PlayScene(PROLOGUE) : new MapScene()); }
 }
@@ -245,14 +245,14 @@ class MapScene {
     drawSprite(c, IMG.iskra_idle, pos.x, pos.y + 6, 124, dir < 0);
     drawParticles(c, 'world');
     txt(c, 'Путь за гирьками', G.W / 2, 64, { size: 56, fill: '#fff8e6', stroke: '#8a4300', sw: 12, shadow: 'rgba(80,40,0,0.35)', sy: 5 });
-    roundIconButton(c, 18, 18, 66, 'home'); addButton(18, 18, 66, 66, () => goScene(() => new TitleScene()), 'home');
-    if (typeof PROLOGUE !== 'undefined') { goldButton(c, 100, 18, 200, 66, 'Сказка', 32, 0, 'green'); addButton(100, 18, 200, 66, () => goScene(() => new PlayScene(PROLOGUE)), 'story'); }
-    roundIconButton(c, G.W - 84, 18, 66, G.muted ? 'mute' : 'sound'); addButton(G.W - 84, 18, 66, 66, () => Sound.toggle(), 'sound');
+    roundIconButton(c, 18 + G.sl, 18, 66, 'home'); addButton(18 + G.sl, 18, 66, 66, () => goScene(() => new TitleScene()), 'home');
+    if (typeof PROLOGUE !== 'undefined') { goldButton(c, 100 + G.sl, 18, 200, 66, 'Сказка', 32, 0, 'green'); addButton(100 + G.sl, 18, 200, 66, () => goScene(() => new PlayScene(PROLOGUE)), 'story'); }
+    roundIconButton(c, G.W - 84 - G.sr, 18, 66, G.muted ? 'mute' : 'sound'); addButton(G.W - 84 - G.sr, 18, 66, 66, () => Sound.toggle(), 'sound');
   }
   onEnter() { goScene(() => new PlayScene(Math.min(LEVELS.length - 1, this.prog - 1))); }
 }
 class FinaleScene {
-  constructor() { this.t = 0; this.fwT = 0; Sound.setMode('finale'); Sound.fanfare(); G.particles = []; G.bubbles = []; G.tasks = []; G.freeze = false; }
+  constructor() { this.t = 0; this.fwT = 0; Sound.setMode('finale'); Sound.fanfare(); G.particles = []; G.bubbles = []; Dialog.reset(); G.tasks = []; G.freeze = false; }
   update(dt) {
     this.t += dt; this.fwT -= dt;
     if (this.fwT <= 0) {
@@ -320,7 +320,7 @@ function updateTrans(dt) {
   const tr = G.trans; if (!tr) return;
   tr.t += dt;
   if (tr.phase === 'out' && tr.t >= 0.4) {
-    G.tasks = []; G.bubbles = []; G.particles = []; G.avoid = []; G.freeze = false; Input.jumpPresses = 0; Voice.stop();
+    G.tasks = []; G.bubbles = []; Dialog.reset(); G.particles = []; G.avoid = []; G.freeze = false; Input.jumpPresses = 0; Voice.stop(true, 'scene');
     try { G.scene = tr.make(); } catch (e) { console.error(e); }
     tr.phase = 'in'; tr.t = 0;
   } else if (tr.phase === 'in' && tr.t >= 0.4) G.trans = null;

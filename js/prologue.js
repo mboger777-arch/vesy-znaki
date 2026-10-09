@@ -38,6 +38,7 @@ const PROLOGUE = {
         gs.right--; S.weightsHave = gs.right; Sound.pop(); sparkBurst(pp.x, pp.y - 20, 10, '#ffe066', 200);
         S.L.add(new FlyItem('weight', 40, pp.x, pp.y - 20, () => sh.x, () => sh.y + 30, 0.35, null, 30));
         sh.weight = true; yield 0.4;
+        if (k === 0) yield vwait(0); // договаривает «Блестяшки!» у весов, а не улетая за кадр
         sh.mode = 'goto'; sh.tx = tx(31) + k * 20; sh.ty = tx(3); yield () => sh.mode === 'arrived'; sh.weight = false;
       }
       sh.weight = true; sh.mode = 'goto'; sh.tx = tx(40); sh.ty = tx(0); Sound.laugh();
@@ -57,7 +58,7 @@ const PROLOGUE = {
   },
   onEnter(S) { PROLOGUE.finish(S); },
   drawHud(S, c) {
-    const w = 250, h = 70, x = G.W - 84 - 80 - 24 - w, y = 16;
+    const w = 250, h = 70, x = G.W - 84 - G.sr - 80 - 24 - w, y = 16;
     goldButton(c, x, y, w, h, 'Пропустить', 32, 0, 'green');
     addButton(x, y, w, h, () => PROLOGUE.finish(S), 'skip');
   },

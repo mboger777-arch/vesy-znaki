@@ -6,16 +6,24 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2b1a3a">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Весы и знаки">
+<meta name="application-name" content="Весы и знаки">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
 <title>Весы и знаки — платформер</title>
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
-html,body{margin:0;height:100%;background:#2b1a3a;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
-canvas{display:block;touch-action:none}
+html,body{margin:0;width:100%;height:100%;height:100dvh;position:fixed;inset:0;background:#2b1a3a;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+canvas{display:block;touch-action:none;position:absolute;left:0;top:0}
+#safe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 #pre{position:fixed;left:-999px;top:0;font:400 20px Pangolin}
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="safe"></div>
 <div id="pre">Весы и знаки 0123456789 &gt; &lt; =</div>
 <script src="js/lines.js"></script>
 <script src="js/voice_manifest.js"></script>

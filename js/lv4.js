@@ -153,7 +153,7 @@ const LV4 = {
     S.hud.text = (S.weightsHave || 0) + ' из 5';   // табличка = золотые гирьки, как в прологе
     // пока станция не пройдена, вагонетка дальше не поедет: на ту сторону — только после ответа
     if (!S.endStarted && S.stations[2].done && p.x > tx(91)) { S.endStarted = true; run(LV4.ending(S)); }
-    if (S.wp && !S.wp.got && !p.hidden && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l4Got(), 3); })()); }
+    if (S.wp && !S.wp.got && !p.hidden && !G.freeze && Dialog.idle() && overlap(p, S.wp.x - 30, S.wp.y - 60, 60, 60)) { S.wp.got = true; weightGot(S); run((function* () { yield 0.3; say(S.p, VL.l4Got(), 3); })()); }
     if (!S.done && !S.flag.locked && overlap(p, S.flag.x - 30, S.flag.y - 190, 60, 190)) { S.flag.on = true; S.complete(); }
   },
   lock(S, st) { return fitLock(tx(st.X0) + 20, tx(st.X0 + 15) + 40, tx(7) - 126); },

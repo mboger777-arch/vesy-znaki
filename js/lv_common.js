@@ -30,8 +30,8 @@ function archSay(a, pose, text, dur) { a.pose = pose; return say(a, text, dur); 
 function* iskraTo(S, x, face = 1) { S.p.autoX = x; S.p.autoFace = face; const t0 = G.t; yield () => S.p.autoX == null || G.t - t0 > 3; }
 // показ: подписываем предметы на чаше по одному
 function* countPan(S, sc, side, speaker, line) {
-  if (line) say(speaker, line, 2.5);
-  yield 0.5; const n = side < 0 ? sc.left : sc.right;
+  if (line) { say(speaker, line, 2.5); yield vwait(0.1); }   // считаем после того, как Архимед договорил (тики не ложатся на голос)
+  yield 0.3; const n = side < 0 ? sc.left : sc.right;
   for (let i = 1; i <= n; i++) { sc.labels = { side, n: i }; Sound.count(Math.min(10, i)); yield 0.55; }
   yield 0.6;
   check((sc.labels ? sc.labels.n : 0) === n, 'показ: подписано столько, сколько лежит на чаше');
@@ -73,6 +73,7 @@ class Step extends Ent {
     c.restore();
   }
 }
+// (гирьку берём только когда сценка кончилась и все договорили — «Ура!» не ложится на реплику)
 // финал уровня: Щёлк роняет гирьку, Искра её подбирает → гирька в табличке, флаг открыт
 function weightGot(S) {
   S.weightsHave = (S.weightsBase || 0) + 1; Sound.secret(); Sound.ura(); G.shake = 0.15;
